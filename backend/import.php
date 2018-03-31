@@ -1,7 +1,7 @@
 <?php
 require("config.php");
 if(php_sapi_name() != "cli") exit;
-if(count($_SERVER['argv']) < 2) die("possible arguments: sets, cards, questions, translations, tokens\n");
+if(count($_SERVER['argv']) < 2) die("possible arguments: sets, cards, questions, cardtranslations, tokens, questiontranslations\n");
 ini_set('memory_limit', '1024M');
 ini_set('max_execution_time', '0');
 $db = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
@@ -22,7 +22,7 @@ if($argv == "sets") {
     }
     $query .= "releasedate='".$db->real_escape_string($set->releaseDate)."'";
     $query = "INSERT INTO sets SET $query ON DUPLICATE KEY UPDATE $query";
-    $db->query($query) or die($db->error);
+    $db->query($query) or die($db->error." ".$query);
   }
 }
 #*/
@@ -64,12 +64,15 @@ if($argv == "cards") {
       foreach($card->foreignNames as $translation) {
         $result = $db->query("SELECT id FROM languages WHERE name = '".$db->real_escape_string($translation->language)."' LIMIT 1");
         while($row = $result->fetch_assoc()) {
-          $db->query("INSERT IGNORE INTO card_translations SET card_id='".$card->id."', language_id='".$row['id']."', name='".$db->real_escape_string($translation->name)."'");
+          $db->query("INSERT IGNORE INTO card_translations SET card_id='".$card->id."', language_id='".$row['id']."', name='".$db->real_escape_string($translation->name)."', multiverseid='".$db->real_escape_string($translation->multiverseid)."'");
         }
         $result->free();
       }
     }
   }
+
+  // mirror PT-BR (6) to PT-PT (12)
+  $db->query("REPLACE INTO card_translations SELECT card_id, 12 AS language_id, name, multiverseid FROM `card_translations` WHERE language_id = 6");
 }
 #*/
 
@@ -94,16 +97,31 @@ if($argv == "cardtranslations") {
         $card->id = $row['id'];
       }
       $result->free();
+      # multiverse id
+      if(isset($card->multiverseid)) {
+	      $db->query("UPDATE cards SET multiverseid = '".$db->real_escape_string($card->multiverseid)."' WHERE id = '".$card->id."' LIMIT 1");
+      }
+
       # translations
       if(isset($card->foreignNames) && count($card->foreignNames)) {
         foreach($card->foreignNames as $translation) {
           if(isset($languages[$translation->language])) {
-            $db->query("INSERT IGNORE INTO card_translations SET card_id='".$card->id."', language_id='".$languages[$translation->language]."', name='".$db->real_escape_string($translation->name)."'");
+            $query = "REPLACE INTO card_translations 
+                      SET card_id='".$card->id."', 
+                      language_id='".$languages[$translation->language]."', 
+                      name='".$db->real_escape_string($translation->name)."'";
+            if(isset($translation->multiverseid)) {
+              $query .= ", multiverseid='".$db->real_escape_string($translation->multiverseid)."'";
+            }
+            $db->query($query);
           }
         }
       }
     }
   }
+
+  // mirror PT-BR (6) to PT-PT (12)
+  $db->query("REPLACE INTO card_translations SELECT card_id, 12 as language_id, name, multiverseid FROM `card_translations` WHERE language_id = 6");
 }
 #*/
 
@@ -188,7 +206,7 @@ if($argv == "questions") {
 #*/
 
 #/* Import translations
-if($argv == "translations") {
+if($argv == "questiontranslations") {
   $translations = array(
     "cn" => 'https://spreadsheets.google.com/feeds/cells/0AqlIQacaL79AdDZoM0toVk5YTG9CWndTSldQODVuVlE/oda/public/values?alt=json',
     "tw" => 'https://spreadsheets.google.com/feeds/cells/0AvKY1T4Hb-_GdG1LZFhDNFpmcFNKZmt0LTZHcmllM2c/oda/public/values?alt=json',

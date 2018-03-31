@@ -7,7 +7,7 @@ The booth wants to make a connection between judges and players by providing a d
 and testing the player's knowledge in a fun environment. The questions are available in 3 levels of difficulty and more
 than 5 different languages.
 
-It is available online under [booth.mnt.me](http://booth.mnt.me) to everyone and supports all internet-ready devices
+It is available online under [booth.magicjudges.org](http://booth.magicjudges.org) to everyone and supports all internet-ready devices
 and screen sizes. If you discover a bug, please [open a ticket](https://github.com/bra1n/judgebooth/issues)!
 
 ![Judge Booth](http://booth.mnt.me/docs/booth1.jpg)
@@ -193,10 +193,11 @@ Development
 
 If you want to contribute to the source code, feel free to fork the project and run your own version.
 
-To get started, you need PHP and a MySQL database with the structure from backend/structure.sql.
-Once that is in place, adjust the database configuration in backend/config.php and import the existing booth questions
+To get started, you need PHP (with Curl support) and a MySQL database with the structure and data from `backend/judgebooth.sql.gz`.
+Once that is in place, adjust the database configuration in backend/config.php and update the existing booth data
 via backend/import.php script from the command line. Example command: `php import.php sets`
-You should import the data in this order: sets, cards, tokens, questions, translations
+You should update the data in this order: sets, cards, tokens, translations
+With this data, there should already be a single question in several different languages in your own booth visible.
 
 The set icon list and the "Modern" / "Standard" filters depend on the content of the `sets` database table. Each set
  there has a flag for `modern`, `standard` and `regular`. These flags need to be manually set in the database and will
@@ -217,8 +218,8 @@ the `index.html` to reflect the current path, for example: `<base href="/booth/"
 **Using the admin interface**
 
 In order to be able to use the admin interface, you need to generate OAuth 2.0 credentials for the Google APIs.
-This process is outlined [here](https://developers.google.com/identity/protocols/OAuth2).
-Once you have your redirect URL, ClientID and ClientSecret, enter these values into your `backend/config.php` file.
+This process is outlined [here](https://developers.google.com/identity/protocols/OAuth2). Make sure that the redirect URL points to your online project URL. Once you have your redirect URL, ClientID and ClientSecret, enter these values into your `backend/config.php` file.
+After that, you only need to add a user to the `user` table with a Google Mail account and the role `admin`. `user.languages` can be left empty for admins.
 
 License and Copyright
 ---------------------

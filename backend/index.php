@@ -89,23 +89,27 @@ function getQuestion($db, $id = false, $lang = false) {
   $output = array();
   if($id && $lang && intval($id) && intval($lang)) {
     // get question metadata
-    $query = "SELECT q.*, qt.question, qt.answer
+    $query = "SELECT q.*, qt.question, qt.answer, IF(qto.changedate > qt.changedate, true, false) as outdated
           FROM questions q
           LEFT JOIN question_translations qt ON qt.question_id = q.id AND qt.language_id = ".$db->real_escape_string($lang)."
+          LEFT JOIN question_translations qto ON qto.question_id = q.id AND qto.language_id = 1
           WHERE q.id = ".$db->real_escape_string($id)."
           LIMIT 1";
     $result = $db->query($query) or die($db->error);
     $output = array("metadata"=>$result->fetch_assoc());
-    $output['cards'] = array();
-    $output["question"] = strip_tags($output["metadata"]["question"]);
-    unset($output["metadata"]["question"]);
-    $output["answer"] = strip_tags($output["metadata"]["answer"]);
-    unset($output["metadata"]["answer"]);
-    $output["metadata"]["live"] = !!($output["metadata"]["live"]);
-    $output["metadata"]["id"] = intval($output["metadata"]["id"]);
-    $output["metadata"]["difficulty"] = intval($output["metadata"]["difficulty"]);
+    if(isset($output['metadata'])) {
+      $output['cards'] = array();
+      $output["question"] = strip_tags($output["metadata"]["question"]);
+      unset($output["metadata"]["question"]);
+      $output["answer"] = strip_tags($output["metadata"]["answer"]);
+      unset($output["metadata"]["answer"]);
+      $output["metadata"]["live"] = !!($output["metadata"]["live"]);
+      $output["metadata"]["outdated"] = !!($output["metadata"]["outdated"]);
+      $output["metadata"]["id"] = intval($output["metadata"]["id"]);
+      $output["metadata"]["difficulty"] = intval($output["metadata"]["difficulty"]);
+    }
     $result->free();
-    $query = "SELECT c.*, IFNULL(ct.name, c.name) name, c.name name_en
+    $query = "SELECT c.*, IFNULL(ct.name, c.name) name, c.name name_en, IFNULL(ct.multiverseid, c.multiverseid) multiverseid
           FROM question_cards qc
           LEFT JOIN cards c ON c.id = qc.card_id
           LEFT JOIN card_translations ct ON ct.card_id = qc.card_id AND ct.language_id = ".$db->real_escape_string($lang)."
@@ -114,6 +118,7 @@ function getQuestion($db, $id = false, $lang = false) {
     $result = $db->query($query) or die($db->error);
     while($row = $result->fetch_assoc()) {
       $row["text"] = nl2br($row["text"]);
+      $row["multiverseid"] = intval($row["multiverseid"]);
       foreach($row as $field=>$value) {
         if($value === "" || $value === null || $field == "id") unset($row[$field]);
       }
@@ -234,25 +239,37 @@ function getAdminQuestions($db, $page) {
 function getAdminQuestion($db, $id) {
   $user = auth($db);
   if(isset($user['role']) && in_array($user['role'],array("admin", "editor", "translator"))){
-    $query = "SELECT q.*, qt.question, qt.answer, qt.changedate, GROUP_CONCAT(c.id,':',c.name ORDER BY sort ASC SEPARATOR '|') cards
+    // get question details
+    $query = "SELECT q.*,
+       GROUP_CONCAT(DISTINCT c.id,':',c.name ORDER BY sort ASC SEPARATOR '|') cards,
+       GROUP_CONCAT(DISTINCT qt.language_id SEPARATOR '|') languages
        FROM questions q
        LEFT JOIN question_cards qc ON qc.question_id = q.id
        LEFT JOIN cards c ON c.id = qc.card_id
        LEFT JOIN question_translations qt ON qt.question_id = q.id
-       WHERE q.id = '".$db->real_escape_string($id)."' AND qt.language_id = 1
+       WHERE q.id = '".$db->real_escape_string($id)."'
        GROUP BY q.id";
     $result = $db->query($query) or die($db->error);
     $question = $result->fetch_assoc();
-    $question['difficulty'] = intval($question['difficulty']);
     $question['id'] = intval($question['id']);
     $question['live'] = !!$question['live'];
     $cards = explode("|",$question['cards']);
+    $question['languages'] = explode("|",$question['languages']);
     $question['cards'] = array();
     foreach($cards as $card) {
       $card = explode(":",$card,2);
       $question['cards'][] = array("id"=>intval($card[0]),"name"=>$card[1]);
     }
     $result->free();
+
+    // get english question text
+    $query = "SELECT qt.question, qt.answer, qt.changedate
+           FROM question_translations qt
+           WHERE qt.question_id = '".$db->real_escape_string($id)."' AND qt.language_id = 1";
+    $result = $db->query($query) or die($db->error);
+    $question = array_merge($question, $result->fetch_assoc());
+    $result->free();
+
     return $question;
   } else {
     header('HTTP/1.0 401 Unauthorized');
@@ -261,7 +278,7 @@ function getAdminQuestion($db, $id) {
 }
 
 function getAdminSuggest($db, $name) {
-  $query = "SELECT id, name FROM `cards`
+  $query = "SELECT id, name, full_name FROM `cards`
      WHERE name LIKE '".$db->real_escape_string($name)."%'
      ORDER BY name ASC LIMIT 10";
   $result = $db->query($query) or die($db->error);
@@ -411,7 +428,9 @@ function getAdminTranslation($db, $language, $id) {
   if(isset($user['role']) && in_array($user['role'],array("admin", "editor", "translator"))
      && (!count($user['languages']) || in_array($language,$user['languages']))) {
     $query = "SELECT q.*, qt.*, qt2.question question_translated, qt2.answer answer_translated,
-       qt2.changedate changedate_translated, GROUP_CONCAT(IFNULL(ct.name, c.name) ORDER BY sort ASC SEPARATOR '|') cards
+       qt2.changedate changedate_translated,
+       GROUP_CONCAT(IFNULL(ct.name, c.name) ORDER BY sort ASC SEPARATOR '|') cards,
+       GROUP_CONCAT(IFNULL(ct.multiverseid, 0) ORDER BY sort ASC SEPARATOR '|') cardids
        FROM questions q
        LEFT JOIN question_cards qc ON qc.question_id = q.id
        LEFT JOIN question_translations qt ON qt.question_id = q.id
@@ -429,6 +448,7 @@ function getAdminTranslation($db, $language, $id) {
       $question['id'] = intval($question['id']);
       $question['live'] = !!$question['live'];
       if(isset($question['cards'])) $question['cards'] = explode("|", $question['cards']);
+      if(isset($question['cardids'])) $question['cardids'] = explode("|", $question['cardids']);
     }
     $result->free();
     return $question;

@@ -1,3 +1,24 @@
+/* Beleren Font */
+@font-face {
+  font-family: "Beleren Bold";
+  src: url(../fonts/BELEREN-BOLD.eot);
+  src: url(../fonts/BELEREN-BOLD.eot?#iefix) format("embedded-opentype"),
+  url(../fonts/BELEREN-BOLD.woff) format("woff"),
+  url(../fonts/BELEREN-BOLD.svg?Beleren-Bold) format("svg");
+}
+
+/* MTG Icons Font */
+@font-face {
+  font-family: 'mtgicons';
+  src:url('../fonts/mtgicons.eot?6y1qae');
+  src:url('../fonts/mtgicons.eot?#iefix6y1qae') format('embedded-opentype'),
+  url('../fonts/mtgicons.woff?6y1qae') format('woff'),
+  url('../fonts/mtgicons.ttf?6y1qae') format('truetype'),
+  url('../fonts/mtgicons.svg?6y1qae#icomoon') format('svg');
+  font-weight: normal;
+  font-style: normal;
+}
+
 $light:                           #fff !default;
 $stable:                          #eee;
 $button-stable-active-bg:         #ccc;
@@ -9,6 +30,8 @@ $energized:                       #f0b840 !default;
 $assertive:                       #ef4e3a !default;
 $royal:                           #8a6de9 !default;
 $dark:                            #313131;
+
+$headings-font-family: "Beleren Bold", "Roboto", "Segoe UI", sans-serif;
 
 @import "../lib/ionic/scss/ionic";
 @import "languages";
@@ -148,6 +171,7 @@ div.scroll { min-height: 90%; }
       i {
         vertical-align: middle;
         font-size: 1.7em;
+        white-space: nowrap;
         &:before, &:after {
           -webkit-transition: all 0.5s;
           -moz-transition: all 0.5s;
@@ -206,6 +230,30 @@ div.cards {
     -webkit-perspective: 1000px;
     perspective: 1000px;
     cursor: pointer;
+    -webkit-transition: transform 0.5s;
+    -moz-transition: transform 0.5s;
+    -ms-transition: transform 0.5s;
+    -o-transition: transform 0.5s;
+    transition: transform 0.5s;
+    -webkit-transform: rotate(0deg);
+    -moz-transform: rotate(0deg);
+    -ms-transform: rotate(0deg);
+    -o-transform: rotate(0deg);
+    transform: rotate(0deg);
+    &.split.show-scan {
+      -webkit-transform: rotate(90deg);
+      -moz-transform: rotate(90deg);
+      -ms-transform: rotate(90deg);
+      -o-transform: rotate(90deg);
+      transform: rotate(90deg);
+    }
+    &.aftermath.show-scan {
+      -webkit-transform: rotate(-90deg);
+      -moz-transform: rotate(-90deg);
+      -ms-transform: rotate(-90deg);
+      -o-transform: rotate(-90deg);
+      transform: rotate(-90deg);
+    }
     div.oracle, .scan {
       position: absolute;
       -webkit-backface-visibility: hidden;
@@ -236,6 +284,7 @@ div.cards {
       transform: rotateY(0deg) scale(1);
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      overflow: hidden;
       .right { float: right; }
       .bottom {
         position: absolute;
@@ -252,7 +301,7 @@ div.cards {
         margin: 0 -9px 4px;
         padding: 4px 8px;
       }
-      .title { margin-bottom: 50px; display: block; }
+      .title { margin-bottom: 20px; display: block; }
       .ability br { line-height: 20px; }
       .ability em { font-style: italic; }
     }
@@ -275,6 +324,19 @@ div.cards {
         transform: rotateY(0deg) scale(1);
       }
     }
+  }
+}
+
+div.question, div.answer {
+  -webkit-tap-highlight-color: rgba(0,0,0,0);
+  -webkit-touch-callout: initial;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  b {
+    font-family: $headings-font-family;
+    font-size: 110%;
   }
 }
 
@@ -321,6 +383,10 @@ div.cards {
       &:hover { background: $positive; color: $light; }
     }
   }
+  .metadata .button {
+    margin-left: 5px;
+    margin-top: -5px;
+  }
   input[disabled] { background: transparent; }
   textarea {
     width: 100%;
@@ -344,11 +410,15 @@ div.cards {
 
 #translation {
   a { text-decoration: none; }
+  .item.disabled { background: #eee; }
   textarea {
     width: 100%;
     max-width: 100%;
     height: 150px;
     max-height: 150px;
+  }
+  .list:last-child {
+    margin-bottom: 20px;
   }
 }
 

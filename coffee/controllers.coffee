@@ -1,14 +1,17 @@
 controllers = angular.module "judgebooth.controllers", []
 
 controllers.controller 'SideCtrl', [
-  "$scope", "questionsAPI", "$ionicScrollDelegate", "$location"
-  ($scope, questionsAPI, $ionicScrollDelegate, $location) ->
+  "$scope", "questionsAPI", "$ionicScrollDelegate", "$location", "$ionicSideMenuDelegate"
+  ($scope, questionsAPI, $ionicScrollDelegate, $location, $ionicSideMenuDelegate) ->
     # get data / basic vars
     $scope.filter = questionsAPI.filter()
+    $scope.filteredQuestions = []
     $scope.languages = questionsAPI.languages()
     $scope.languageCounts = {}
     $scope.offlineMode = window.offlineMode
     questionsAPI.sets().then (response) -> $scope.sets = response.data
+
+    $scope.languageFilter = (language) -> $scope.languageCounts[language.id] > 0
 
     # get questions and generate maps with counts
     questionsAPI.questions().then (response) ->
@@ -56,8 +59,10 @@ controllers.controller 'SideCtrl', [
     # calculate number of resulting questions and selected sets
     $scope.updateCount = ->
       questionsAPI.filterQuestions($scope.filter, no).then (questions) -> $scope.filteredQuestions = questions
-      $scope.setCount = Object.keys($scope.setCounts[$scope.filter.language]).length
-      $scope.setCount-- for set in $scope.filter.sets when $scope.setCounts[$scope.filter.language][set]
+      $scope.setCount = 0
+      if $scope.setCounts[$scope.filter.language]
+        $scope.setCount = Object.keys($scope.setCounts[$scope.filter.language]).length
+        $scope.setCount-- for set in $scope.filter.sets when $scope.setCounts[$scope.filter.language][set]
 
     # show the questions
     $scope.showQuestions = ->
@@ -65,22 +70,36 @@ controllers.controller 'SideCtrl', [
       questionsAPI.filter $scope.filter
       $scope.next()
 
+    # save filter when sidebar is closed
+    $scope.$watch (() => $ionicSideMenuDelegate.isOpenLeft()), (isOpen) =>
+      if !isOpen and $scope.filteredQuestions.length
+        questionsAPI.filter $scope.filter
+
     # auth handling
     $scope.tab = "filter"
     $scope.user = questionsAPI.user()
+
+    # login
     $scope.login = ->
       questionsAPI.auth().then (auth) ->
         window.location.href = auth.login if auth.login?
         $scope.user = auth if auth.role?
       , (response) -> $scope.user = response.data
+
+    # logout
     $scope.logout = ->
       questionsAPI.logout()
       $scope.user = false
       $scope.tab = "filter"
+
+    # toggle sidebar tab
     $scope.toggleTab = (tab) -> $scope.tab = tab
+
+    # login 2nd step (oauth)
     if $location.search().code?
       questionsAPI.auth($location.search().code).then (auth) ->
         $location.search('code',null)
+        $location.path auth.redirect if auth.redirect?
         $scope.user = auth if auth.role?
       , (response) ->
         $location.search('code',null)
@@ -93,7 +112,7 @@ controllers.controller 'HomeCtrl', [
     $scope.sets = []
     $scope.languages = []
     $scope.authors = []
-    $scope.questions = []
+    $scope.questions = null
     $scope.filtered = []
     $scope.$on "$ionicView.enter", ->
       questionsAPI.questions().then (response) ->
@@ -110,20 +129,24 @@ controllers.controller 'HomeCtrl', [
 controllers.controller 'QuestionCtrl', [
   "$scope", "questionsAPI", "$stateParams", "$state", "$ionicScrollDelegate"
   ($scope, questionsAPI, $stateParams, $state, $ionicScrollDelegate) ->
-    gatherer = 'http://gatherer.wizards.com/Handlers/Image.ashx?type=card&name='
+    gatherer = 'http://gatherer.wizards.com/Handlers/Image.ashx?type=card&'
     $scope.$on "$ionicView.enter", ->
       questionsAPI.question($stateParams.id).then (question) ->
         return $state.go "app.home" unless question.metadata?.id
         $scope.question = question
         for card in question.cards
-          card.src = gatherer + card.name
-          card.src = gatherer + card.full_name if card.layout is "split"
+          card.src = gatherer + 'name=' + card.name
+          card.src = gatherer + 'name=' + card.full_name if card.layout in ["split","aftermath"]
+          card.src = gatherer + 'multiverseid=' + card.multiverseid if card.multiverseid
           card.src = card.url if card.url
+          # aftermath layout only for the second half of the card
+          if card.layout is 'aftermath' and card.name_en is card.full_name.substr(0, card.name_en.length)
+            card.layout = 'normal'
           card.manacost = (card.manacost or "")
-          .replace /\{([wubrgx0-9]+)\}/ig, (a,b) -> "<i class='mtg mana-#{b.toLowerCase()}'></i>"
+          .replace /\{([cwubrgx0-9]+)\}/ig, (a,b) -> "<i class='mtg mana-#{b.toLowerCase()}'></i>"
           .replace /\{([2wubrg])\/([wubrg])\}/ig, (a,b,c) -> "<i class='mtg hybrid-#{(b+c).toLowerCase()}'></i>"
           card.text = (card.text or "")
-          .replace /\{([wubrgx0-9]+)\}/ig, (a,b) -> "<i class='mtg mana-#{b.toLowerCase()}'></i>"
+          .replace /\{([cwubrgx0-9]+)\}/ig, (a,b) -> "<i class='mtg mana-#{b.toLowerCase()}'></i>"
           .replace /\{t\}/ig, "<i class='mtg tap'></i>"
           .replace /\{q\}/ig, "<i class='mtg untap'></i>"
           .replace /\{([2wubrg])\/([wubrg])\}/ig, (a,b,c) -> "<i class='mtg hybrid-#{(b+c).toLowerCase()}'></i>"
@@ -150,7 +173,7 @@ controllers.controller 'AdminNewCtrl', [
     $scope.$on "$ionicView.enter", ->
       $scope.question =
         author: $scope.user.name
-        difficulty: 1
+        difficulty: "1"
         cards: []
     $scope.add = -> $scope.question.cards.push {}
     # delete a card
@@ -194,7 +217,7 @@ controllers.controller 'AdminNewCtrl', [
           questionsAPI.admin.clearShortCache()
           $scope.question =
             author: $scope.user.name
-            difficulty: 1
+            difficulty: "1"
             cards: []
         else
           alert "Error when submitting question"
@@ -332,7 +355,7 @@ controllers.controller 'AdminTranslationCtrl', [
 controllers.controller 'AdminUsersCtrl', [
   "$scope", "questionsAPI", "$state"
   ($scope, questionsAPI, $state) ->
-    $scope.languages = {}
+    $scope.languages = []
     $scope.roles = ["admin", "editor", "translator", "guest"]
     $scope.languages[language.id] = language for language in questionsAPI.languages() when language.code isnt "en"
     $scope.$on "$ionicView.enter", ->
