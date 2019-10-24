@@ -1,5 +1,10 @@
 <?php
 require("config.php");
+define('MONTH', 60*60*24*30);
+// server should keep session data for AT LEAST 1 month
+ini_set('session.gc_maxlifetime', MONTH);
+// each client should remember their session id for EXACTLY 1 month
+session_set_cookie_params(MONTH);
 session_start();
 $db = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 $db->set_charset("utf8");
@@ -28,7 +33,7 @@ function auth($db, $token = "") {
                 "&grant_type=authorization_code";
     $ch = curl_init();
     curl_setopt($ch,CURLOPT_URL, "https://www.googleapis.com/oauth2/v3/token");
-    curl_setopt($ch,CURLOPT_POST, count($postData));
+    curl_setopt($ch,CURLOPT_POST, true);
     curl_setopt($ch,CURLOPT_POSTFIELDS, $postData);
     curl_setopt($ch,CURLOPT_RETURNTRANSFER,true);
     $result = json_decode(curl_exec($ch));
@@ -57,11 +62,12 @@ function auth($db, $token = "") {
 
 // get a list of all questions with sets and languages
 function getQuestions($db) {
-  $query = "SELECT q.*, GROUP_CONCAT(DISTINCT set_id) sets, GROUP_CONCAT(DISTINCT qt.language_id) languages FROM questions q
+  $query = "SELECT q.*, GROUP_CONCAT(DISTINCT set_id) sets, GROUP_CONCAT(DISTINCT qto.language_id) languages FROM questions q
         LEFT JOIN question_cards qc ON qc.question_id = q.id
         LEFT JOIN card_sets cs ON cs.card_id = qc.card_id
         LEFT JOIN sets s ON s.id = cs.set_id
-        LEFT JOIN question_translations qt ON qt.question_id = q.id
+        LEFT JOIN question_translations qt ON qt.question_id = q.id AND qt.language_id = 1
+		LEFT JOIN question_translations qto ON qto.question_id = q.id AND qto.changedate >= qt.changedate
         WHERE s.regular = 1 AND q.live = 1
         GROUP BY q.id, qc.card_id";
   $result = $db->query($query) or die($db->error());
@@ -194,7 +200,7 @@ function getQuestionsAndCards($db) {
 
 function getAdminQuestions($db, $page) {
   $user = auth($db);
-  $pagesize = 20;
+  $pagesize = 10;
   if(isset($user['role']) && in_array($user['role'],array("admin", "editor", "translator"))){
     $start = intval($page) * $pagesize;
     $query = "SELECT SQL_CALC_FOUND_ROWS q.*,
